@@ -16,6 +16,7 @@ Related lab: [EVPN/VXLAN Spine-Leaf Fabric](https://github.com/hans375-olo/evpn-
 
 ## Topology
 
+
 ```
                     ┌─────────────────┐
                     │       R1        │
