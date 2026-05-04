@@ -558,10 +558,10 @@ after variable interpolation occurs.
 ansible_connection: ansible.netcommon.network_cli
 ansible_network_os: cisco.ios.ios
 ansible_user: admin
-ansible_password: cisco123
+ansible_password: (choose-your-own)
 ansible_become: true
 ansible_become_method: enable
-ansible_become_password: cisco123
+ansible_become_password: (choose-your-own)
 ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
 ```
 
