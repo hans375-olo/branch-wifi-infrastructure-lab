@@ -523,7 +523,7 @@ production:
 ### Repository structure
 
 ```
-retail-branch-wifi-ansible-lab/
+branch-wifi-infrastructure-lab/
 ├── ansible/
 │   ├── ansible.cfg                 # vault password file path, default inventory
 │   ├── inventory/
