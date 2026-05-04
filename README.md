@@ -495,9 +495,9 @@ route to 10.10.99.0/24 via the Ubuntu host's campus LAN address:
 
 ```bash
 # On Fedora — persistent static route (NetworkManager)
-sudo nmcli connection modify <connection-name> \
+sudo nmcli connection modify ens160 \
   +ipv4.routes "10.10.99.0/24 172.20.1.10"
-sudo nmcli connection up <connection-name>
+sudo nmcli connection up ens160
 ```
 
 Both VMs run in VMware Workstation bridged mode, placing them on the same
@@ -781,9 +781,9 @@ Add a static route on Fedora so it can reach the lab management subnet
 via the Ubuntu/CML host:
 
 ```bash
-sudo nmcli connection modify <your-connection-name> \
-  +ipv4.routes "10.10.99.0/24 <ubuntu-host-172.20.1.x>"
-sudo nmcli connection up <your-connection-name>
+sudo nmcli connection modify ens160 \
+  +ipv4.routes "10.10.99.0/24 172.20.1.10"
+sudo nmcli connection up ens160
 ```
 
 Verify:
