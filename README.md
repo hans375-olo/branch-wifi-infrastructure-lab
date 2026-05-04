@@ -533,10 +533,10 @@ branch-wifi-infrastructure-lab/
 │   ├── playbooks/
 │   │   ├── push_base_configs.yml   # idempotent full config push
 │   │   └── backup_configs.yml      # pull running configs to Fedora
-│   └── requirements.yml            # Ansible collection dependencies
-├── backups/
-│   ├── latest/                     # overwritten each run — diff baseline
-│   └── archive/                    # timestamped — audit trail
+│   ├── requirements.yml            # Ansible collection dependencies
+|   └── backups/
+│       ├── latest/                 # overwritten each run — diff baseline
+│       └── archive/                # timestamped — audit trail
 ├── verification/
 │   └── assert_lab_state.py         # Netmiko state assertions
 ├── topology.yaml                   # CML topology export — import to recreate lab
