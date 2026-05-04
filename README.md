@@ -1,4 +1,4 @@
-# Retail Branch WiFi Infrastructure Lab
+# Retail Branch WiFi Infrastructure with Ansible Lab
 
 ## Overview
 
@@ -9,6 +9,7 @@ VLAN design, trunking, inter-VLAN routing, DHCP, ACL-based segmentation and
 STP in a documented, reproducible lab environment.
 
 Built in Cisco Modeling Labs (CML) Free tier. No physical hardware required.
+Ansible playbooks added later.
 
 Related lab: [EVPN/VXLAN Spine-Leaf Fabric](https://github.com/hans375-olo/evpn-vxlan-lab--arista-eve-ng)
 
@@ -439,6 +440,13 @@ iface eth0.99 inet static
   gateway 10.10.99.1
   vlan-raw-device eth0
 ```
+**IOL-L2 boots with `ip routing` enabled**
+IOL-L2 images enable IP routing by default. On a switch this means the
+device will attempt to route traffic independently rather than rely on R1,
+breaking SSH reachability from the management network. All switch configs
+include `no ip routing`. If reachability issues occur after a fresh boot,
+verify with `show ip routing` on the switch console and apply
+`no ip routing` manually before retrying the playbook.
 
 ---
 
@@ -462,26 +470,370 @@ distribution layer and the edge:
 - This lab provides direct preparation for Fortinet NSE certification
 
 ### Phase 4 — Automation
-Apply CCNA Automation skills to this lab:
-
-- Ansible playbook to deploy base configs across all nodes
-- Python/Netmiko script to verify VLAN state and ACL hit counters
-- Jinja2 templates for AP uplink port provisioning
-- Git-based config versioning with automated diff on change
-
+&
 ### Phase 5 — External Connector (CML)
-CML Free supports an External Connector node that bridges the lab 
-to your physical network interface:
+Phases 4 and 5 are implemented together because they depend on each other:
+external connectivity is what makes host-based automation possible, and
+host-based automation is the reason external connectivity is worth configuring.
 
-- Real internet reachability for Guest/IoT VLANs via R1 default route
-- SSH access to all lab nodes from your physical PC
-- Integration with other VMs on the same host (Ansible control node, 
-  syslog server, RADIUS)
+### Network path
 
-To implement: drag an External Connector node into your CML topology, 
-connect it to R1 Et0/1, configure a default route on R1 pointing to 
-your physical gateway, and enable NAT overload on R1 Et0/1. 
-To be documented in a follow-up commit.
+```
+Lab nodes (10.10.99.x)
+  → R1 Et0/1 (192.168.255.2)
+    → CML External Connector → virbr0 (192.168.255.1) on Ubuntu/CML host
+      → bridge0 (172.20.1.10) on Ubuntu/CML host
+        → Fedora Ansible VM (172.20.1.x) — campus LAN, bridged mode
+```
+
+The CML External Connector bridges R1 Et0/1 into `virbr0`, a libvirt bridge
+managed by CML on the Ubuntu host. A tap interface (visible as `lnk*` in
+`ip addr`) is created per External Connector link and enslaved to `virbr0`.
+
+R1 holds a default route via 192.168.255.1. The Fedora VM holds a static
+route to 10.10.99.0/24 via the Ubuntu host's campus LAN address:
+
+```bash
+# On Fedora — persistent static route (NetworkManager)
+sudo nmcli connection modify <connection-name> \
+  +ipv4.routes "10.10.99.0/24 172.20.1.10"
+sudo nmcli connection up <connection-name>
+```
+
+Both VMs run in VMware Workstation bridged mode, placing them on the same
+172.20.1.0/24 campus LAN segment. Ansible reaches lab nodes directly over
+SSH — no jump host required.
+
+Return path: lab nodes reply via R1's default route (192.168.255.1 →
+Ubuntu virbr0 → bridge0 → campus LAN → Fedora VM).
+
+### Why host-based automation matters
+
+Running the control node outside CML mirrors how automation works in
+production:
+
+- The management plane is physically separate from the network under test
+- Ansible state, playbooks, logs, and Git history persist across CML
+  restarts and topology changes
+- The External Connector path exercises the same SSH reachability a real
+  out-of-band management network would use
+- Any VM or tool on the same management network can be added without
+  touching the lab topology
+
+### Repository structure
+
+```
+retail-branch-wifi-ansible-lab/
+├── ansible/
+│   ├── ansible.cfg                 # vault password file path, default inventory
+│   ├── inventory/
+│   │   ├── hosts.ini               # device inventory
+│   │   └── group_vars/
+│   │       └── all.yml             # connection vars + credentials, Vault-encrypted
+│   ├── playbooks/
+│   │   ├── push_base_configs.yml   # idempotent full config push
+│   │   └── backup_configs.yml      # pull running configs to Fedora
+│   └── requirements.yml            # Ansible collection dependencies
+├── backups/
+│   ├── latest/                     # overwritten each run — diff baseline
+│   └── archive/                    # timestamped — audit trail
+├── verification/
+│   └── assert_lab_state.py         # Netmiko state assertions
+├── topology.yaml                   # CML topology export — import to recreate lab
+└── README.md
+```
+
+### Ansible Vault — credential management
+
+All connection vars and credentials live in a single file,
+`inventory/group_vars/all.yml`, which is encrypted with Ansible Vault.
+This is simpler than splitting plain-text and encrypted files, and avoids
+a subtle Ansible variable resolution issue where `{{ vault_* }}` references
+in a plain-text `all.yml` can remain unresolved if the vault file is loaded
+after variable interpolation occurs.
+
+`inventory/group_vars/all.yml` (shown unencrypted — always encrypted at rest):
+
+```yaml
+ansible_connection: ansible.netcommon.network_cli
+ansible_network_os: cisco.ios.ios
+ansible_user: admin
+ansible_password: cisco123
+ansible_become: true
+ansible_become_method: enable
+ansible_become_password: cisco123
+ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+```
+
+Encrypt it:
+
+```bash
+ansible-vault encrypt inventory/group_vars/all.yml
+```
+
+Store the vault password in a local file excluded from Git — this means
+`ansible-playbook` never prompts for a password:
+
+```bash
+echo "your-vault-password" > ~/.vault_pass
+chmod 600 ~/.vault_pass
+echo ".vault_pass" >> ~/.gitignore
+```
+
+Point `ansible.cfg` to it:
+
+```ini
+# ansible/ansible.cfg
+[defaults]
+vault_password_file = ~/.vault_pass
+inventory = inventory/hosts.ini
+```
+
+All `ansible-playbook` runs now decrypt transparently. To edit credentials:
+
+```bash
+ansible-vault edit inventory/group_vars/all.yml
+```
+
+> **Production note:** In production you would split this into a plain-text
+> file for non-sensitive connection vars and a separate encrypted vault file
+> for credentials only — keeping the inventory human-readable without the
+> vault password. For a lab of this size the single encrypted file is
+> simpler and avoids variable resolution edge cases.
+
+### Ansible — base config push
+
+`playbooks/push_base_configs.yml` uses IOS resource modules for idempotent
+state management, falling back to `ios_config` only for constructs not
+covered by a dedicated module:
+
+| Play | Module | Purpose |
+|------|--------|---------|
+| switches | `cisco.ios.ios_vlans` | VLAN database, `state: merged` |
+| switches | `cisco.ios.ios_l2_interfaces` | Trunk port config, `state: merged` |
+| switches | `cisco.ios.ios_config` | STP root (L3SW only) |
+| routers | `cisco.ios.ios_config` | Subinterfaces, ACLs, ACL application |
+
+Trunk port assignments are defined as a dict in playbook vars keyed by
+`inventory_hostname`, keeping the playbook self-contained without
+requiring per-host `host_vars` files for a lab of this size.
+
+Run from the `ansible/` directory:
+
+```bash
+cd ~/cml-lab1/ansible
+ansible-playbook playbooks/push_base_configs.yml
+```
+
+### Ansible — backup playbook
+
+`playbooks/backup_configs.yml` pulls the running config from all four
+nodes and writes it to two locations on the Fedora VM:
+
+- `backups/latest/<hostname>.cfg` — overwritten on every run, used as
+  the baseline for config diff
+- `backups/archive/<hostname>_<timestamp>.cfg` — never overwritten,
+  provides a full audit trail
+
+
+## cat ~/cml-lab1/ansible/playbooks/backup_configs.yml
+
+```yaml
+---
+- name: Backup running configs from all nodes
+  hosts: all
+  gather_facts: false
+
+  vars:
+    backup_dir: "{{ playbook_dir }}/../backups"
+    timestamp: "{{ lookup('pipe', 'date +%Y-%m-%dT%H-%M') }}"
+
+  tasks:
+    - name: Collect running config
+      cisco.ios.ios_command:
+        commands: show running-config
+      register: running_config
+
+    - name: Ensure backup directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0750"
+      loop:
+        - "{{ backup_dir }}/latest"
+        - "{{ backup_dir }}/archive"
+      delegate_to: localhost
+      run_once: false
+
+    - name: Write latest config (overwrite)
+      ansible.builtin.copy:
+        content: "{{ running_config.stdout[0] }}"
+        dest: "{{ backup_dir }}/latest/{{ inventory_hostname }}.cfg"
+        mode: "0640"
+      delegate_to: localhost
+
+    - name: Write timestamped archive copy
+      ansible.builtin.copy:
+        content: "{{ running_config.stdout[0] }}"
+        dest: "{{ backup_dir }}/archive/{{ inventory_hostname }}_{{ timestamp }}.cfg"
+        mode: "0640"
+      delegate_to: localhost
+```
+
+Run:
+
+```bash
+ansible-playbook playbooks/backup_configs.yml
+```
+
+After a clean lab build, run this immediately to establish the baseline.
+To diff the current state against baseline at any point:
+
+```bash
+diff backups/latest/R1.cfg <(ssh admin@10.10.99.1 "show run")
+# or re-run the backup playbook and use git diff:
+git diff backups/latest/ backups/archive
+# if you have not before make sure to install git first
+# on Fedora:
+sudo dnf install git
+```
+
+Committing `backups/latest/` to Git after the initial build means every
+subsequent backup run produces a clean `git diff` showing exactly what
+changed — the same workflow used in production network change management.
+
+> **Note:** Add `backups/archive/` to `.gitignore` to keep the repo clean.
+> Only `backups/latest/` needs version control.
+
+### Netmiko — state verification
+
+`verification/assert_lab_state.py` connects to each node over SSH,
+runs show commands, and asserts expected state. Exits 0 on full pass,
+1 on any failure — usable as a CI step or a post-change check.
+
+Assertions covered:
+
+| Device | Checks |
+|--------|--------|
+| R1 | Subinterfaces up (all 4 VLANs), ACLs exist with deny entries, ACLs applied inbound on correct subinterfaces, DHCP pools present |
+| L3SW | VLAN database, trunk allowed VLANs, trunk forwarding state, STP root |
+| ACC1/ACC2 | VLAN database, trunk allowed VLANs, trunk forwarding state, not STP root |
+
+Run:
+
+```bash
+python3 verification/assert_lab_state.py
+```
+
+---
+
+## Quickstart — Recreating the Lab
+
+This guide assumes:
+- CML instance running on an Ubuntu VM (VMware, bridged)
+- Fedora VM running on the same host (VMware, bridged)
+- Both VMs on the same LAN segment
+- The `topology.yaml` file from this repository
+
+### 1. Import the CML topology
+
+In the CML web UI: **Import** → select `topology.yaml` from the repo.
+This creates all four nodes (R1, L3SW, ACC1, ACC2) with interfaces
+pre-wired and the External Connector linked to R1 Et0/1.
+
+Start the lab. Wait for all nodes to reach **BOOTED** state before
+proceeding.
+
+> **IOL-L2 gotcha — `no ip routing`:** IOL-L2 images boot with
+> `ip routing` enabled by default. This causes the switches to attempt
+> to route traffic themselves, breaking SSH reachability from the Fedora
+> VM to switch management IPs. The symptom is a silent SSH timeout.
+>
+> The pushed configs include `no ip routing` on all three switches.
+> If you connect to a switch console before running the playbook and
+> SSH is unreachable, confirm with `show ip routing` and apply
+> `no ip routing` manually to unblock the push.
+
+### 2. Set up the Fedora control node
+
+```bash
+# Install Ansible
+sudo dnf install ansible-core python3-pip -y
+
+# Install required collections
+ansible-galaxy collection install -r requirements.yml
+
+# Install Netmiko for the verification script
+pip3 install netmiko --user
+```
+
+`requirements.yml`:
+
+```yaml
+collections:
+  - name: cisco.ios
+  - name: ansible.netcommon
+```
+
+### 3. Configure network reachability
+
+Add a static route on Fedora so it can reach the lab management subnet
+via the Ubuntu/CML host:
+
+```bash
+sudo nmcli connection modify <your-connection-name> \
+  +ipv4.routes "10.10.99.0/24 <ubuntu-host-172.20.1.x>"
+sudo nmcli connection up <your-connection-name>
+```
+
+Verify:
+
+```bash
+ping 10.10.99.1   # R1 — should reply once configs are pushed
+```
+
+### 4. Configure Ansible Vault
+
+```bash
+# Edit all.yml with your credentials (already present in the repo as encrypted)
+# To re-encrypt with your own password:
+ansible-vault decrypt ansible/inventory/group_vars/all.yml
+# edit if needed, then re-encrypt:
+ansible-vault encrypt ansible/inventory/group_vars/all.yml
+
+# Store the vault password locally so you're never prompted
+echo "your-vault-password" > ~/.vault_pass
+chmod 600 ~/.vault_pass
+# .vault_pass is already in .gitignore
+```
+
+### 5. Push base configuration
+
+```bash
+ansible-playbook playbooks/push_base_configs.yml
+```
+
+Expected: all tasks complete with `ok` or `changed`, no failures.
+
+### 6. Establish config baseline
+
+```bash
+ansible-playbook playbooks/backup_configs.yml
+git add backups/latest/
+git commit -m "baseline: initial lab build"
+```
+
+### 7. Verify lab state
+
+```bash
+python3 verification/assert_lab_state.py
+```
+
+Expected: all assertions `[PASS]`, exit 0.
+
+The lab is fully operational when the verification script exits clean.
+Any future change can be validated by re-running steps 6 and 7 and
+inspecting the `git diff`.
 
 ---
 
@@ -502,4 +854,28 @@ To be documented in a follow-up commit.
   it APs experience a 30-second delay on every reboot while STP converges
 - BPDU Guard should not be enabled on AP uplinks — some AP models 
   pass BPDUs and will trigger err-disable on the port
+- IOL-L2 requires explicit `no ip routing` — the default routing-enabled
+  state silently breaks SSH reachability from the management network before
+  configs are pushed; always verify on the console first if the initial
+  playbook run fails
+- Encrypt the entire `group_vars/all.yml` rather than splitting into plain-text
+  and vault files — the two-file pattern is cleaner in theory but causes a
+  variable resolution edge case where `{{ vault_* }}` references remain
+  unresolved if the vault file is loaded after interpolation; a single
+  encrypted file sidesteps this entirely
+- Store the vault password in `~/.vault_pass` (chmod 600, in `.gitignore`)
+  and point `ansible.cfg` to it — eliminates the `--ask-vault-pass` prompt
+  on every run without exposing credentials
+- `backups/latest/` committed to Git after the initial build turns every
+  subsequent backup run into a meaningful `git diff` — the same change
+  management pattern used in production
+- ACL lines pushed via `ios_config` require correct leading whitespace —
+  IOS XE is sensitive to indentation inside named ACL blocks; a missing
+  space before `deny`/`permit` produces a new top-level config statement
+  rather than an ACL entry
+- `ios_vlans` and `ios_l2_interfaces` with `state: merged` are idempotent
+  — re-running the playbook on an already-configured switch produces only
+  `ok`, never spurious `changed` — use resource modules over raw
+  `ios_config` wherever a module exists
+
 ~~~
