@@ -1,0 +1,10 @@
+ls -l archive
+total 40
+-rw-r-----. 1 usernm usernm 3851 May  4 08:23 ACC1_2026-05-04T08-23.cfg
+-rw-r-----. 1 usernm usernm 3851 May  4 08:40 ACC1_2026-05-04T08-40.cfg
+-rw-r-----. 1 usernm usernm 3978 May  4 08:23 ACC2_2026-05-04T08-23.cfg
+-rw-r-----. 1 usernm usernm 3978 May  4 08:40 ACC2_2026-05-04T08-40.cfg
+-rw-r-----. 1 usernm usernm 3735 May  4 08:23 L3SW_2026-05-04T08-23.cfg
+-rw-r-----. 1 usernm usernm 3735 May  4 08:40 L3SW_2026-05-04T08-40.cfg
+-rw-r-----. 1 usernm usernm 4897 May  4 08:23 R1_2026-05-04T08-23.cfg
+-rw-r-----. 1 usernm usernm 4897 May  4 08:40 R1_2026-05-04T08-40.cfg
