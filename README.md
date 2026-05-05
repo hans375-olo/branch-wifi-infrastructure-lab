@@ -453,7 +453,7 @@ verify with `show ip routing` on the switch console and apply
 ## Extending the Lab
 
 ### Phase 2 — Wireless Controller Integration
-Add a Cisco Catalyst 9800 wireless controller (if available in your 
+Not started. Add a Cisco Catalyst 9800 wireless controller (if available in your 
 CML version) or connect to a cloud-managed Meraki environment:
 
 - 9800 WLC manages AP registration and SSID-to-VLAN mapping
@@ -461,6 +461,7 @@ CML version) or connect to a cloud-managed Meraki environment:
 - SSID broadcast begins immediately — wired policy already in place
 
 ### Phase 3 — Stateful Firewall
+Not started. Implies a rebuild in EVE-NG or GNS3.
 Replace R1 ACLs with a Fortinet or Palo Alto VM between the 
 distribution layer and the edge:
 
@@ -469,12 +470,17 @@ distribution layer and the edge:
 - Application-aware Guest filtering (social media, streaming, etc.)
 - This lab provides direct preparation for Fortinet NSE certification
 
-### Phase 4 — Automation
+### Phase 4 — Automation with Ansible
 &
 ### Phase 5 — External Connector (CML)
-Phases 4 and 5 are implemented together because they depend on each other:
+Executed. Phases 4 and 5 are implemented together because they depend on each other:
 external connectivity is what makes host-based automation possible, and
 host-based automation is the reason external connectivity is worth configuring.
+
+### Change of setup
+
+Replace the Alpine Linux node in CML with a dedicated Fedora management server VM. 
+Install Ansible. See below for details.
 
 ### Network path
 
@@ -637,6 +643,7 @@ nodes and writes it to two locations on the Fedora VM:
 
 
 ## cat ~/cml-lab1/ansible/playbooks/backup_configs.yml
+
 
 ```yaml
 ---
