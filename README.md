@@ -398,9 +398,11 @@ MGMT-PC uses a single physical NIC (eth0) with VLAN subinterfaces
 for lab verification. This causes the same MAC address to appear in 
 multiple VLANs in the switch MAC address table, resulting in frame 
 duplication when simulating inter-VLAN traffic from the same host. 
-In production each client has a unique MAC per VLAN. This does not 
-affect the validity of ACL or routing verification — deny counters 
-behave correctly.
+In production each client has a unique MAC per VLAN. This affects MAC 
+table accuracy but **does not invalidate** ACL/routing tests – deny 
+counters behave correctly. In production, each client has a unique 
+MAC per VLAN. This is a lab constraint I've documented rather than 
+ignored.
 
 **Native VLAN 1 STP isolation**
 VLAN 1 is not included in trunk allowed lists (by design — no user 
