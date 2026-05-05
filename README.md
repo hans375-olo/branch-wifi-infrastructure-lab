@@ -641,8 +641,12 @@ nodes and writes it to two locations on the Fedora VM:
 - `backups/archive/<hostname>_<timestamp>.cfg` — never overwritten,
   provides a full audit trail
 
+View:
 
-- `cat ~/cml-lab1/ansible/playbooks/backup_configs.yml` 
+```bash
+cat ~/cml-lab1/ansible/playbooks/backup_configs.yml
+```
+
 
 ```yaml
 ---
@@ -743,9 +747,9 @@ This guide assumes:
 
 ### 1. Import the CML topology
 
-In the CML web UI: **Import** → select `topology.yaml` from the repo.
-This creates all four nodes (R1, L3SW, ACC1, ACC2) with interfaces
-pre-wired and the External Connector linked to R1 Et0/1.
+In the CML web UI: **Import** → select `Branch_(WiFi)_Infrastructure_Lab.yaml` 
+from the repo. This creates all four nodes (R1, L3SW, ACC1, ACC2) with 
+interfaces pre-wired and the External Connector linked to R1 Et0/1.
 
 Start the lab. Wait for all nodes to reach **BOOTED** state before
 proceeding.
