@@ -642,8 +642,7 @@ nodes and writes it to two locations on the Fedora VM:
   provides a full audit trail
 
 
-## cat ~/cml-lab1/ansible/playbooks/backup_configs.yml
-
+- `cat ~/cml-lab1/ansible/playbooks/backup_configs.yml` 
 
 ```yaml
 ---
@@ -740,7 +739,7 @@ This guide assumes:
 - CML instance running on an Ubuntu VM (VMware, bridged)
 - Fedora VM running on the same host (VMware, bridged)
 - Both VMs on the same LAN segment
-- The `topology.yaml` file from this repository
+- The `Branch_(WiFi)_Infrastructure_Lab.yaml` file from this repository
 
 ### 1. Import the CML topology
 
